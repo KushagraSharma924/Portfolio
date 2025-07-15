@@ -5,7 +5,7 @@ import { Terminal, Folder, File, User, Mail, Github, Linkedin, ExternalLink, Che
 
 const TerminalWindow = ({ 
   children, 
-  title = "anish@portfolio", 
+  title = "kushagrash@portfolio", 
   className = "",
   glowEffect = false 
 }: { 
@@ -82,8 +82,8 @@ const TypewriterText = ({
     <span className={className}>
       {displayText}
       {currentIndex <= text.length && (
-        <span className={`${showCursor ? 'opacity-100' : 'opacity-0'} transition-opacity duration-100`}>
-          <span className="bg-green-400 text-black px-1">█</span>
+        <span className={`${showCursor ? 'opacity-100' : 'opacity-0'} transition-opacity duration-150`}>
+          <span className="bg-green-400 text-green-400 inline-block w-2 h-5 ml-0.5 relative top-0.5 rounded-sm">█</span>
         </span>
       )}
     </span>
@@ -94,7 +94,7 @@ const CommandLine = ({
   command, 
   output, 
   delay = 0,
-  user = "anish",
+  user = "Kushagrash",
   host = "portfolio",
   path = "~"
 }: { 
@@ -316,7 +316,7 @@ export default function Home() {
       <div className="max-w-7xl mx-auto relative z-10">
         {/* Enhanced Header */}
         <div className="mb-8">
-          <TerminalWindow title="anish@portfolio: ~" glowEffect={true} className="terminal-window">
+          <TerminalWindow title="kushagrash@portfolio: ~" glowEffect={true} className="terminal-window">
             <div ref={terminalRef} className="max-h-96 overflow-y-auto custom-scrollbar">
               <CommandLine 
                 command="neofetch" 
@@ -326,7 +326,7 @@ export default function Home() {
                       <div>
                         <div className="text-cyan-400 text-2xl font-bold mb-2 flex items-center space-x-2">
                           <User className="w-6 h-6" />
-                          <span>Anish Soni</span>
+                          <span>Kushagra Sharma</span>
                         </div>
                         <div className="text-gray-300 mb-2">Senior Full Stack Developer</div>
                         <div className="text-gray-400 text-sm mb-4">📍 San Francisco, CA</div>
@@ -378,10 +378,10 @@ export default function Home() {
                 command="ps aux | grep creativity" 
                 output={
                   <div className="space-y-1 text-xs">
-                    <div className="text-green-400">anish    1337  0.0  0.1  innovation.js    running</div>
-                    <div className="text-blue-400">anish    2048  0.0  0.2  problem-solving  active</div>
-                    <div className="text-purple-400">anish    4096  0.0  0.1  code-quality     optimizing</div>
-                    <div className="text-yellow-400">anish    8192  0.0  0.3  collaboration    engaged</div>
+                    <div className="text-green-400">kushagrash   1337  0.0  0.1  innovation.js    running</div>
+                    <div className="text-blue-400">kushagrash   2048  0.0  0.2  problem-solving  active</div>
+                    <div className="text-purple-400">kushagrash    4096  0.0  0.1  code-quality     optimizing</div>
+                    <div className="text-yellow-400">kushagrash    8192  0.0  0.3  collaboration    engaged</div>
                   </div>
                 }
                 delay={4000}
@@ -488,7 +488,7 @@ export default function Home() {
         <div className="grid lg:grid-cols-2 gap-8">
           <TerminalWindow title="contact.sh" className="terminal-window">
             <CommandLine 
-              command="curl -X GET https://api.anish.dev/contact" 
+              command="curl -X GET https://api.kushagrash.dev/contact" 
               output={
                 <div className="space-y-6">
                   <div className="bg-gray-800/30 border border-gray-700/50 rounded-lg p-4">
@@ -496,10 +496,10 @@ export default function Home() {
 {`{
   "status": "200 OK",
   "data": {
-    "email": "anish@example.com",
-    "github": "github.com/anishsoni",
-    "linkedin": "linkedin.com/in/anishsoni",
-    "location": "San Francisco, CA",
+    "email": "kush090605@gmail.com",
+    "github": "github.com/KushagraSharma924",
+    "linkedin": "linkedin.com/in/kushagrashh",
+    "location": "Pune,Maharashtra",
     "timezone": "PST (UTC-8)",
     "availability": "open_to_opportunities"
   }
@@ -509,9 +509,9 @@ export default function Home() {
                   
                   <div className="flex space-x-4">
                     {[
-                      { icon: Mail, label: 'Email', href: 'mailto:anish@example.com' },
-                      { icon: Github, label: 'GitHub', href: 'https://github.com' },
-                      { icon: Linkedin, label: 'LinkedIn', href: 'https://linkedin.com' }
+                      { icon: Mail, label: 'Email', href: 'mailto:kush090605@gmail.com' },
+                      { icon: Github, label: 'GitHub', href: 'https://github.com/KushagraSharma924/' },
+                      { icon: Linkedin, label: 'LinkedIn', href: 'https://www.linkedin.com/in/kushagrashh/' }
                     ].map((social, index) => (
                       <a
                         key={index}
@@ -596,7 +596,7 @@ export default function Home() {
                 </div>
               </div>
               <TypewriterText 
-                text="© 2024 Anish Soni. All rights reserved. Made with ❤️ and lots of ☕" 
+                text="© 2025 Kushagra Sharma. All rights reserved. Buy me a Coffee" 
                 delay={1000}
                 speed={30}
                 className="text-gray-400 font-mono text-sm"

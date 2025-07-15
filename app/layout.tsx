@@ -15,21 +15,21 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Anish Soni - Enhanced Terminal Portfolio',
+  title: 'Kushagra Sharma',
   description: 'Senior Full Stack Developer & Terminal Enthusiast. Experience an enhanced command line interface showcasing professional expertise with advanced UI and smooth animations.',
   keywords: 'full stack developer, terminal, command line, React, Next.js, TypeScript, portfolio, UI/UX, animations',
-  authors: [{ name: 'Anish Soni' }],
+  authors: [{ name: 'Kushagra Sharma' }],
   viewport: 'width=device-width, initial-scale=1',
   openGraph: {
-    title: 'Anish Soni - Enhanced Terminal Portfolio',
+    title: 'Kushagra Sharma',
     description: 'Senior Full Stack Developer & Terminal Enthusiast. Experience an enhanced command line interface showcasing professional expertise.',
     type: 'website',
-    url: 'https://anishsoni.dev',
-    siteName: 'Anish Soni Portfolio',
+    url: 'https://kushagrasharma.me',
+    siteName: 'Kushagra Sharma',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Anish Soni - Enhanced Terminal Portfolio',
+    title: 'Kushagra Sharma',
     description: 'Senior Full Stack Developer & Terminal Enthusiast',
   },
   robots: {
