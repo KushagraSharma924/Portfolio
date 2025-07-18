@@ -187,13 +187,21 @@ const ProjectCard = ({ project, index }: { project: any; index: number }) => (
       </div>
       <div className="flex items-center space-x-2">
         <span className={`text-xs px-3 py-1 rounded-full font-medium ${
-          project.status === 'production' 
+          project.status === 'public' 
             ? 'bg-green-900/50 text-green-400 border border-green-400/30' 
+            : project.status === 'private'
+            ? 'bg-red-900/50 text-red-400 border border-red-400/30'
+            : project.status === 'fork'
+            ? 'bg-blue-900/50 text-blue-400 border border-blue-400/30'
             : 'bg-yellow-900/50 text-yellow-400 border border-yellow-400/30'
         }`}>
           {project.status}
         </span>
-        <ExternalLink className="w-4 h-4 text-gray-500 group-hover:text-green-400 transition-colors cursor-pointer" />
+        {project.url && (
+          <a href={project.url} target="_blank" rel="noopener noreferrer">
+            <ExternalLink className="w-4 h-4 text-gray-500 group-hover:text-green-400 transition-colors cursor-pointer" />
+          </a>
+        )}
       </div>
     </div>
     
@@ -220,6 +228,12 @@ const ProjectCard = ({ project, index }: { project: any; index: number }) => (
           <GitBranch className="w-3 h-3" />
           <span>{project.forks || '0'}</span>
         </div>
+        {project.commitCount !== undefined && (
+          <div className="flex items-center space-x-1">
+            <Code className="w-3 h-3" />
+            <span>{project.commitCount} commits</span>
+          </div>
+        )}
       </div>
       <span>Updated {project.updated || '2 days ago'}</span>
     </div>
@@ -230,45 +244,352 @@ export default function Home() {
   const [currentSection, setCurrentSection] = useState('welcome');
   const [isPlaying, setIsPlaying] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
+  const [gitCommits, setGitCommits] = useState<any[]>([]);
+  const [realProjects, setRealProjects] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [projectsLoading, setProjectsLoading] = useState(true);
 
-  const projects = [
-    {
-      name: "neural-network-visualizer",
-      description: "Interactive visualization tool for understanding neural network architectures and training processes",
-      tech: ["React", "D3.js", "TensorFlow.js", "WebGL"],
-      status: "production",
-      stars: "1.2k",
-      forks: "89",
-      updated: "2 hours ago"
-    },
-    {
-      name: "distributed-chat-system",
-      description: "Scalable real-time chat application with microservices architecture and WebSocket clustering",
-      tech: ["Node.js", "Redis", "Docker", "Kubernetes", "Socket.io"],
-      status: "development",
-      stars: "856",
-      forks: "124",
-      updated: "1 day ago"
-    },
-    {
-      name: "blockchain-voting-dapp",
-      description: "Decentralized voting application built on Ethereum with smart contracts and IPFS storage",
-      tech: ["Solidity", "Web3.js", "React", "IPFS", "Truffle"],
-      status: "production",
-      stars: "2.1k",
-      forks: "312",
-      updated: "3 days ago"
-    },
-    {
-      name: "ai-code-reviewer",
-      description: "Machine learning powered code review assistant that provides intelligent suggestions and bug detection",
-      tech: ["Python", "FastAPI", "Transformers", "PostgreSQL"],
-      status: "development",
-      stars: "743",
-      forks: "67",
-      updated: "5 hours ago"
-    }
-  ];
+  // Fetch real GitHub data with localStorage caching
+  useEffect(() => {
+    const fetchGitHubData = async () => {
+      const cacheKey = 'github_commits_data';
+      const cacheExpiry = 15 * 60 * 1000; // 15 minutes cache
+      
+      try {
+        // Check localStorage first
+        const cachedData = localStorage.getItem(cacheKey);
+        const cacheTimestamp = localStorage.getItem(cacheKey + '_timestamp');
+        
+        if (cachedData && cacheTimestamp) {
+          const isExpired = Date.now() - parseInt(cacheTimestamp) > cacheExpiry;
+          if (!isExpired) {
+            setGitCommits(JSON.parse(cachedData));
+            setLoading(false);
+            return;
+          }
+        }
+
+        const username = 'KushagraSharma924';
+        const reposResponse = await fetch(`https://api.github.com/users/${username}/repos?sort=updated&per_page=5`);
+        const repos = await reposResponse.json();
+        
+        const commitsData: any[] = [];
+        for (const repo of repos.slice(0, 3)) {
+
+          try {
+            const commitsResponse = await fetch(`https://api.github.com/repos/${username}/${repo.name}/commits?per_page=2`);
+            const commits = await commitsResponse.json();
+            
+            if (Array.isArray(commits)) {
+              commits.forEach(commit => {
+                commitsData.push({
+                  sha: commit.sha.substring(0, 7),
+                  message: commit.commit.message.split('\n')[0],
+                  date: new Date(commit.commit.author.date),
+                  repo: repo.name,
+                  author: commit.commit.author.name
+                });
+              });
+            }
+          } catch (error) {
+            // Silent error handling for individual repos
+          }
+        }
+        
+        // Sort commits by date (newest first)
+        commitsData.sort((a, b) => b.date - a.date);
+        const finalCommits = commitsData.slice(0, 5);
+        
+        // Cache the results
+        localStorage.setItem(cacheKey, JSON.stringify(finalCommits));
+        localStorage.setItem(cacheKey + '_timestamp', Date.now().toString());
+        
+        setGitCommits(finalCommits);
+        setLoading(false);
+      } catch (error) {
+        // Fallback to mock data
+        const fallbackCommits = [
+          { sha: '2f8a9c3', message: 'feat: Enhanced terminal UI with advanced animations', repo: 'portfolio', author: 'Kushagra Sharma' },
+          { sha: '1a7b2d4', message: 'feat: Added smooth scroll navigation and parallax effects', repo: 'portfolio', author: 'Kushagra Sharma' },
+          { sha: '9e5f1c8', message: 'feat: Implemented typewriter animations and terminal windows', repo: 'portfolio', author: 'Kushagra Sharma' },
+          { sha: '4d3a7b2', message: 'feat: Created responsive portfolio layout', repo: 'portfolio', author: 'Kushagra Sharma' },
+          { sha: '8c1f5e9', message: 'initial: Portfolio foundation with Next.js and Tailwind', repo: 'portfolio', author: 'Kushagra Sharma' }
+        ];
+        setGitCommits(fallbackCommits);
+        setLoading(false);
+      }
+    };
+
+    fetchGitHubData();
+  }, []);
+
+  // Fetch real GitHub projects with localStorage caching
+  useEffect(() => {
+    const fetchGitHubProjects = async () => {
+      const cacheKey = 'github_projects_data';
+      const cacheExpiry = 30 * 60 * 1000; // 30 minutes cache for projects
+      
+      try {
+        // Check localStorage first
+        const cachedData = localStorage.getItem(cacheKey);
+        const cacheTimestamp = localStorage.getItem(cacheKey + '_timestamp');
+        
+        if (cachedData && cacheTimestamp) {
+          const isExpired = Date.now() - parseInt(cacheTimestamp) > cacheExpiry;
+          if (!isExpired) {
+            setRealProjects(JSON.parse(cachedData));
+            setProjectsLoading(false);
+            return;
+          }
+        }
+
+        const username = 'KushagraSharma924';
+        
+        // GitHub token for accessing private repos from environment
+        const token = process.env.NEXT_PUBLIC_GITHUB_TOKEN;
+        
+        const headers: Record<string, string> = {
+          'Accept': 'application/vnd.github.v3+json',
+        };
+
+        // Add authorization if token is available
+        if (token) {
+          headers['Authorization'] = `token ${token}`;
+        }
+        
+        // Use authenticated endpoint to get all repos including private ones
+        const reposResponse = await fetch(`https://api.github.com/user/repos?sort=updated&per_page=100&affiliation=owner`, {
+          headers
+        });
+        const repos = await reposResponse.json();
+        
+        if (!reposResponse.ok) {
+          setProjectsLoading(false);
+          return;
+        }
+        
+        if (!Array.isArray(repos)) {
+          setProjectsLoading(false);
+          return;
+        }
+
+        const projectsData: any[] = [];
+        
+        // Process repos in batches to avoid rate limiting
+        for (let i = 0; i < Math.min(repos.length, 30); i++) {
+          const repo = repos[i];
+          
+          // Improved filtering for starred/curated repositories
+          const repoNameLower = repo.name.toLowerCase();
+          const repoDescLower = (repo.description || '').toLowerCase();
+          
+          const isLikelyStarred = 
+            repoNameLower.includes('awesome-') || 
+            repoNameLower.includes('curated') ||
+            repoNameLower.includes('list-') ||
+            repoNameLower.includes('resources') ||
+            repoDescLower.includes('curated') ||
+            repoDescLower.includes('collection of') ||
+            repoDescLower.includes('awesome list') ||
+            repoDescLower.includes('list of') ||
+            // Skip empty repos that are likely just starred/bookmarked
+            (repo.size === 0 && !repo.private && repo.fork);
+          
+          if (isLikelyStarred) {
+            continue;
+          }
+          
+          try {
+            // Get commit count using multiple methods for accuracy
+            let commitCount = 0;
+            
+            try {
+              // Method 1: Try to get commit count from contributors API (most accurate)
+              const contributorsResponse = await fetch(`https://api.github.com/repos/${username}/${repo.name}/contributors?per_page=100`, {
+                headers
+              });
+              if (contributorsResponse.ok) {
+                const contributors = await contributorsResponse.json();
+                if (Array.isArray(contributors)) {
+                  commitCount = contributors.reduce((total: number, contributor: any) => {
+                    return total + (contributor.contributions || 0);
+                  }, 0);
+                }
+              }
+            } catch (error) {
+              // Silent error handling
+            }
+
+            // Method 2: If contributors API fails, try commits API with pagination
+            if (commitCount === 0) {
+              try {
+                const commitsResponse = await fetch(`https://api.github.com/repos/${username}/${repo.name}/commits?per_page=1`, {
+                  headers
+                });
+                if (commitsResponse.ok) {
+                  const linkHeader = commitsResponse.headers.get('Link');
+                  if (linkHeader) {
+                    const lastPageMatch = linkHeader.match(/page=(\d+)>; rel="last"/);
+                    if (lastPageMatch) {
+                      commitCount = parseInt(lastPageMatch[1]);
+                    }
+                  } else {
+                    // If no pagination, fetch all commits to count
+                    const allCommitsResponse = await fetch(`https://api.github.com/repos/${username}/${repo.name}/commits`, {
+                      headers
+                    });
+                    if (allCommitsResponse.ok) {
+                      const commits = await allCommitsResponse.json();
+                      commitCount = Array.isArray(commits) ? commits.length : 1;
+                    }
+                  }
+                }
+              } catch (error) {
+                commitCount = 1; // Default to 1 if we can't get count
+              }
+            }
+
+            // Get languages
+            let techStack: string[] = [];
+            try {
+              const languagesResponse = await fetch(`https://api.github.com/repos/${username}/${repo.name}/languages`, {
+                headers
+              });
+              if (languagesResponse.ok) {
+                const languages = await languagesResponse.json();
+                techStack = Object.keys(languages).slice(0, 4);
+              }
+            } catch (error) {
+              // Silent error handling
+            }
+
+            // Use repo.language as fallback
+            if (techStack.length === 0 && repo.language) {
+              techStack = [repo.language];
+            }
+            if (techStack.length === 0) {
+              techStack = ['Code'];
+            }
+
+            // Include repositories with commits or if they're private (private repos might be in development)
+            if (commitCount > 0 || repo.private) {
+              projectsData.push({
+                name: repo.name,
+                description: repo.description || 'No description available',
+                tech: techStack,
+                status: repo.private ? 'private' : (repo.fork ? 'fork' : 'public'),
+                stars: repo.stargazers_count || 0,
+                forks: repo.forks_count || 0,
+                updated: new Date(repo.updated_at).toLocaleDateString(),
+                commitCount: commitCount,
+                url: repo.html_url,
+                language: repo.language || 'Code',
+                size: repo.size || 0,
+                createdAt: new Date(repo.created_at),
+                pushedAt: new Date(repo.pushed_at || repo.updated_at)
+              });
+            }
+
+            // Add small delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 150));
+
+          } catch (error) {
+            // Add basic info for any repo that's not likely starred (including forks you've worked on)
+            if (!isLikelyStarred) {
+              projectsData.push({
+                name: repo.name,
+                description: repo.description || 'No description available',
+                tech: [repo.language || 'Code'],
+                status: repo.private ? 'private' : (repo.fork ? 'fork' : 'public'),
+                stars: repo.stargazers_count || 0,
+                forks: repo.forks_count || 0,
+                updated: new Date(repo.updated_at).toLocaleDateString(),
+                commitCount: repo.private ? 1 : (repo.size > 0 ? 1 : 0), // Assume private repos have commits
+                url: repo.html_url,
+                language: repo.language || 'Code',
+                size: repo.size || 0,
+                createdAt: new Date(repo.created_at),
+                pushedAt: new Date(repo.pushed_at || repo.updated_at)
+              });
+            }
+          }
+        }
+        
+        // Sort by last updated date (most recent first), then by commit count as secondary
+        projectsData.sort((a, b) => {
+          // Primary sort: by last updated/pushed date (most recent first)
+          const dateA = a.pushedAt.getTime();
+          const dateB = b.pushedAt.getTime();
+          if (dateB !== dateA) {
+            return dateB - dateA;
+          }
+          // Secondary sort: by commit count if dates are the same
+          return b.commitCount - a.commitCount;
+        });
+
+        const finalProjects = projectsData.slice(0, 15); // Show top 15 projects
+        
+        // Cache the results
+        localStorage.setItem(cacheKey, JSON.stringify(finalProjects));
+        localStorage.setItem(cacheKey + '_timestamp', Date.now().toString());
+        
+        setRealProjects(finalProjects);
+        setProjectsLoading(false);
+      } catch (error) {
+        // Fallback: Try without authentication to get public repos
+        try {
+          const fallbackResponse = await fetch(`https://api.github.com/users/KushagraSharma924/repos?sort=updated&per_page=50&type=owner`);
+          const fallbackRepos = await fallbackResponse.json();
+          
+          if (Array.isArray(fallbackRepos) && fallbackRepos.length > 0) {
+            const fallbackProjects = fallbackRepos
+              .filter(repo => {
+                // Accept all repos that have some activity, including forks
+                const repoNameLower = repo.name.toLowerCase();
+                const repoDescLower = (repo.description || '').toLowerCase();
+                
+                const isLikelyStarred = 
+                  repoNameLower.includes('awesome-') || 
+                  repoNameLower.includes('curated') ||
+                  repoNameLower.includes('list-') ||
+                  repoDescLower.includes('curated') ||
+                  repoDescLower.includes('collection of');
+                
+                return !isLikelyStarred && repo.size > 0;
+              })
+              .slice(0, 10)
+              .map(repo => ({
+                name: repo.name,
+                description: repo.description || 'No description available',
+                tech: [repo.language || 'Code'],
+                status: repo.fork ? 'fork' : 'public',
+                stars: repo.stargazers_count || 0,
+                forks: repo.forks_count || 0,
+                updated: new Date(repo.updated_at).toLocaleDateString(),
+                commitCount: 1,
+                url: repo.html_url,
+                language: repo.language || 'Code',
+                size: repo.size || 0,
+                createdAt: new Date(repo.created_at),
+                pushedAt: new Date(repo.pushed_at || repo.updated_at)
+              }));
+            
+            // Cache fallback results too
+            localStorage.setItem(cacheKey, JSON.stringify(fallbackProjects));
+            localStorage.setItem(cacheKey + '_timestamp', Date.now().toString());
+            
+            setRealProjects(fallbackProjects);
+          }
+        } catch (fallbackError) {
+          // Silent error handling
+        }
+        
+        setProjectsLoading(false);
+      }
+    };
+
+    fetchGitHubProjects();
+  }, []);
 
   const skills = [
     { name: "JavaScript/TypeScript", level: 95 },
@@ -283,25 +604,18 @@ export default function Home() {
 
   const experience = [
     {
-      role: "Senior Full Stack Engineer",
-      company: "TechCorp Inc.",
-      period: "2022 - Present",
-      description: "Leading development of core platform features, architecting scalable microservices, and mentoring junior developers.",
-      achievements: ["Reduced API response time by 60%", "Led team of 5 developers", "Implemented CI/CD pipeline"]
+      role: "SDE Intern",
+      company: "MediHut Pharma (CureZip)",
+      period: "Feb 2025 - Present",
+      description: "Leading backend development for pharmacy automation and prescription processing.",
+      achievements: ["Built REST APIs for prescription parsing using Google Vision API", "Improved backend-frontend sync, reducing latency by 30%", "Automated pharmacy workflows for digital prescription handling"]
     },
     {
-      role: "Frontend Developer",
-      company: "StartupXYZ",
-      period: "2020 - 2022",
-      description: "Built responsive web applications and collaborated with design teams on modern frontend architectures.",
-      achievements: ["Increased user engagement by 40%", "Migrated legacy codebase to React", "Optimized bundle size by 50%"]
-    },
-    {
-      role: "Junior Developer",
-      company: "DevStudio",
-      period: "2019 - 2020",
-      description: "Developed web applications using React and Node.js, participated in code reviews and agile development.",
-      achievements: ["Delivered 15+ projects on time", "Improved test coverage to 85%", "Mentored 3 interns"]
+      role: "Research Intern",
+      company: "CSIR-National Physical Laboratory (NPL)",
+      period: "Jun 2025 - Present",
+      description: "Exploring memristive systems for educational applications.",
+      achievements: ["Studied memristors for interactive STEM learning tools", "Built e-textile circuits for low-cost classroom demonstrations"]
     }
   ];
 
@@ -328,18 +642,18 @@ export default function Home() {
                           <User className="w-6 h-6" />
                           <span>Kushagra Sharma</span>
                         </div>
-                        <div className="text-gray-300 mb-2">Senior Full Stack Developer</div>
-                        <div className="text-gray-400 text-sm mb-4">📍 San Francisco, CA</div>
+                        <div className="text-gray-300 mb-2"> Backend and DevOps Developer</div>
+                        <div className="text-gray-400 text-sm mb-4">📍 Pune, Maharashtra</div>
                         <StatusIndicator status="online" label="Available for opportunities" />
                       </div>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-gray-400">OS:</span>
-                          <span className="text-green-400">macOS Sonoma</span>
+                          <span className="text-green-400">macOS Sequoia</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-400">Shell:</span>
-                          <span className="text-green-400">zsh 5.9</span>
+                          <span className="text-green-400">zsh 2.14</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-400">Editor:</span>
@@ -347,11 +661,11 @@ export default function Home() {
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-400">Languages:</span>
-                          <span className="text-green-400">8+</span>
+                          <span className="text-green-400">3+</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-400">Experience:</span>
-                          <span className="text-green-400">5+ years</span>
+                          <span className="text-green-400">1.5 years</span>
                         </div>
                       </div>
                     </div>
@@ -364,11 +678,20 @@ export default function Home() {
                 command="git log --oneline --graph --decorate" 
                 output={
                   <div className="space-y-1 font-mono text-xs">
-                    <div className="text-yellow-400">* 2f8a9c3 (HEAD -> main) feat: Enhanced terminal UI with advanced animations</div>
-                    <div className="text-green-400">* 1a7b2d4 feat: Added smooth scroll navigation and parallax effects</div>
-                    <div className="text-blue-400">* 9e5f1c8 feat: Implemented typewriter animations and terminal windows</div>
-                    <div className="text-purple-400">* 4d3a7b2 feat: Created responsive portfolio layout</div>
-                    <div className="text-cyan-400">* 8c1f5e9 initial: Portfolio foundation with Next.js and Tailwind</div>
+                    {loading ? (
+                      <div className="text-gray-400">Loading recent commits...</div>
+                    ) : (
+                      gitCommits.map((commit, index) => {
+                        const colors = ['text-yellow-400', 'text-green-400', 'text-blue-400', 'text-purple-400', 'text-cyan-400'];
+                        const color = colors[index % colors.length];
+                        return (
+                          <div key={commit.sha} className={color}>
+                            * {commit.sha} {index === 0 ? '(HEAD -> main) ' : ''}{commit.message}
+                            {commit.repo && <span className="text-gray-500 ml-2">({commit.repo})</span>}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 }
                 delay={2000}
@@ -418,14 +741,25 @@ export default function Home() {
 
         {/* Enhanced Projects Grid */}
         <div className="grid lg:grid-cols-2 gap-8 mb-8">
-          <TerminalWindow title="projects.json" className="terminal-window">
+          <TerminalWindow title="top-repos.json" className="terminal-window">
             <CommandLine 
-              command="cat projects.json | jq '.featured[]'" 
+              command="cat top-repos.json | jq '.mostActive[] | sort_by(.updated) | reverse'" 
               output={
                 <div className="space-y-6">
-                  {projects.slice(0, 2).map((project, index) => (
-                    <ProjectCard key={index} project={project} index={index} />
-                  ))}
+                  {projectsLoading ? (
+                    <div className="text-gray-400 text-center py-8">🔍 Analyzing repositories (including private repos)...</div>
+                  ) : realProjects.length > 0 ? (
+                    <>
+                      <div className="text-sm text-green-400 mb-4 font-mono">
+                        🏆 Most recently updated repositories (your latest work)
+                      </div>
+                      {realProjects.slice(0, 2).map((project, index) => (
+                        <ProjectCard key={index} project={project} index={index} />
+                      ))}
+                    </>
+                  ) : (
+                    <div className="text-gray-400 text-center py-8">No repositories found</div>
+                  )}
                 </div>
               }
               delay={0}
@@ -448,6 +782,8 @@ export default function Home() {
             />
           </TerminalWindow>
         </div>
+
+
 
         {/* Enhanced Experience Section */}
         <div className="mb-8">
