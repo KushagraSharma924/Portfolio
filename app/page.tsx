@@ -1124,19 +1124,37 @@ export default function Home() {
                 { cmd: 'projects', icon: Folder, desc: 'View my work' },
                 { cmd: 'experience', icon: Code, desc: 'Career journey' },
                 { cmd: 'skills', icon: Zap, desc: 'Technical expertise' },
-                { cmd: 'contact', icon: Mail, desc: 'Get in touch' }
+                { cmd: 'contact', icon: Mail, desc: 'Get in touch' },
+                { cmd: 'resume', icon: File, desc: 'Download CV', href: '/resume.pdf' }
               ].map((item) => (
-                <button
-                  key={item.cmd}
-                  className="group flex items-center space-x-3 px-6 py-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg border border-gray-600/50 hover:border-green-400/50 transition-all duration-300 hover:shadow-lg hover:shadow-green-400/10"
-                >
-                  <item.icon className="w-5 h-5 text-green-400 group-hover:text-cyan-400 transition-colors" />
-                  <div className="text-left">
-                    <div className="text-white font-mono">./{item.cmd}</div>
-                    <div className="text-xs text-gray-400 group-hover:text-gray-300">{item.desc}</div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-green-400 transition-colors" />
-                </button>
+                item.href ? (
+                  <a
+                    key={item.cmd}
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex items-center space-x-3 px-6 py-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg border border-gray-600/50 hover:border-green-400/50 transition-all duration-300 hover:shadow-lg hover:shadow-green-400/10"
+                  >
+                    <item.icon className="w-5 h-5 text-green-400 group-hover:text-cyan-400 transition-colors" />
+                    <div className="text-left">
+                      <div className="text-white font-mono">./{item.cmd}</div>
+                      <div className="text-xs text-gray-400 group-hover:text-gray-300">{item.desc}</div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-green-400 transition-colors" />
+                  </a>
+                ) : (
+                  <button
+                    key={item.cmd}
+                    className="group flex items-center space-x-3 px-6 py-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg border border-gray-600/50 hover:border-green-400/50 transition-all duration-300 hover:shadow-lg hover:shadow-green-400/10"
+                  >
+                    <item.icon className="w-5 h-5 text-green-400 group-hover:text-cyan-400 transition-colors" />
+                    <div className="text-left">
+                      <div className="text-white font-mono">./{item.cmd}</div>
+                      <div className="text-xs text-gray-400 group-hover:text-gray-300">{item.desc}</div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-green-400 transition-colors" />
+                  </button>
+                )
               ))}
             </div>
           </TerminalWindow>
