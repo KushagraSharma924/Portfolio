@@ -57,6 +57,52 @@
   ::-webkit-scrollbar-corner {
     @apply bg-gray-900;
   }
+
+  /* Mobile-specific responsive optimizations */
+  @media (max-width: 768px) {
+    html {
+      /* Improve touch scrolling on iOS */
+      -webkit-overflow-scrolling: touch;
+      /* Prevent zoom on input focus on iOS */
+      -webkit-text-size-adjust: 100%;
+    }
+    
+    body {
+      /* Improve font rendering on mobile */
+      text-rendering: optimizeLegibility;
+      /* Better touch interactions */
+      -webkit-tap-highlight-color: transparent;
+      /* Prevent overscroll bounce on iOS */
+      overscroll-behavior: none;
+    }
+    
+    /* Improve button tap areas for mobile accessibility */
+    button, a, [role="button"] {
+      min-height: 44px;
+    }
+    
+    /* Better focus states for mobile */
+    input, textarea, select {
+      font-size: 16px; /* Prevent zoom on iOS */
+    }
+    
+    /* Enhanced terminal window for mobile */
+    .terminal-window {
+      border-radius: 8px; /* Slightly smaller radius on mobile */
+    }
+    
+    /* Improve scrolling in terminal content */
+    .custom-scrollbar {
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+  
+  /* Tablet optimizations */
+  @media (min-width: 769px) and (max-width: 1024px) {
+    html {
+      -webkit-text-size-adjust: 100%;
+    }
+  }
 }
 
 @layer components {
@@ -480,8 +526,11 @@
     transition-duration: 0.01ms !important;
   }
   
-  .typewriter-enhanced {
-    animation: none;
+  .typewriter-enhanced,
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-gradient-x {
+    animation: none !important;
   }
   
   .matrix-rain::before {
@@ -490,16 +539,19 @@
 }
 
 @media (prefers-contrast: high) {
-  body {
-    @apply bg-black text-white;
-  }
-  
   .terminal-window {
-    @apply border-white;
+    border-width: 2px;
   }
   
-  .terminal-glow {
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+  .text-gray-400 {
+    color: rgb(156, 163, 175) !important;
+  }
+}
+
+/* Dark mode optimizations (default state) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
   }
 }
 
@@ -517,18 +569,6 @@
   .matrix-rain,
   .particles {
     display: none;
-  }
-}
-
-/* Dark Mode Support */
-@media (prefers-color-scheme: light) {
-  :root {
-    --terminal-green: #059669;
-    --terminal-blue: #2563eb;
-    --terminal-purple: #7c3aed;
-    --terminal-yellow: #d97706;
-    --terminal-red: #dc2626;
-    --terminal-cyan: #0891b2;
   }
 }
 

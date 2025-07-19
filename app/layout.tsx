@@ -19,7 +19,12 @@ export const metadata: Metadata = {
   description: 'Backend and DevOps Developer',
   keywords: 'full stack developer, terminal, command line, React, Next.js, TypeScript, portfolio, UI/UX, animations',
   authors: [{ name: 'Kushagra Sharma' }],
-  viewport: 'width=device-width, initial-scale=1',
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 5,
+    userScalable: true,
+  },
   openGraph: {
     title: 'Kushagra Sharma',
     description: 'Senior Full Stack Developer & Terminal Enthusiast. Experience an enhanced command line interface showcasing professional expertise.',
@@ -57,8 +62,8 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="theme-color" content="#000000" />
       </head>
-      <body className={`${jetbrainsMono.className} antialiased bg-black overflow-x-hidden`}>
-        <div id="root">
+      <body className={`${jetbrainsMono.className} antialiased bg-black overflow-x-hidden min-h-screen`}>
+        <div id="root" className="min-h-screen w-full">
           {children}
         </div>
       </body>
