@@ -16,7 +16,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: 'Kushagra Sharma',
-  description: 'Senior Full Stack Developer & Terminal Enthusiast. Experience an enhanced command line interface showcasing professional expertise with advanced UI and smooth animations.',
+  description: 'Backend and DevOps Developer',
   keywords: 'full stack developer, terminal, command line, React, Next.js, TypeScript, portfolio, UI/UX, animations',
   authors: [{ name: 'Kushagra Sharma' }],
   viewport: 'width=device-width, initial-scale=1',
