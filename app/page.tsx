@@ -3,6 +3,158 @@
 import { useState, useEffect, useRef } from 'react';
 import { Terminal, Folder, File, User, Mail, Github, Linkedin, ExternalLink, ChevronRight, Code, Database, Globe, Zap, Coffee, Star, GitBranch, Play, Pause, Volume2, VolumeX } from 'lucide-react';
 
+// Cache configuration
+const CACHE_CONFIG = {
+  COMMITS_EXPIRY: 15 * 60 * 1000, // 15 minutes
+  PROJECTS_EXPIRY: 30 * 60 * 1000, // 30 minutes
+  MAX_CONCURRENT_REQUESTS: 5, // Limit concurrent API calls
+  REQUEST_DELAY: 100, // Reduced delay between requests
+};
+
+// Utility function for parallel processing with concurrency limit
+const processInBatches = async <T, R>(
+  items: T[],
+  processor: (item: T) => Promise<R>,
+  batchSize: number = CACHE_CONFIG.MAX_CONCURRENT_REQUESTS
+): Promise<R[]> => {
+  const results: R[] = [];
+  
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await Promise.allSettled(
+      batch.map(item => processor(item))
+    );
+    
+    batchResults.forEach(result => {
+      if (result.status === 'fulfilled') {
+        results.push(result.value);
+      }
+    });
+    
+    // Small delay between batches to avoid rate limiting
+    if (i + batchSize < items.length) {
+      await new Promise(resolve => setTimeout(resolve, CACHE_CONFIG.REQUEST_DELAY));
+    }
+  }
+  
+  return results;
+};
+
+// Optimized GitHub API client with retry logic
+class GitHubAPIClient {
+  private baseURL = 'https://api.github.com';
+  private headers: Record<string, string>;
+
+  constructor(token?: string) {
+    this.headers = {
+      'Accept': 'application/vnd.github.v3+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+
+    if (token) {
+      this.headers['Authorization'] = `token ${token}`;
+    }
+  }
+
+  async fetchWithRetry(url: string, retries = 2): Promise<any> {
+    for (let i = 0; i <= retries; i++) {
+      try {
+        const response = await fetch(url, { 
+          headers: this.headers,
+          cache: 'force-cache', // Use browser cache when possible
+        });
+        
+        if (response.status === 403) {
+          // Rate limit hit, wait and retry
+          if (i < retries) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+            continue;
+          }
+        }
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        return await response.json();
+      } catch (error) {
+        if (i === retries) throw error;
+        await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
+      }
+    }
+  }
+
+  async getRepos(username: string, includePrivate = false): Promise<any[]> {
+    const endpoint = includePrivate 
+      ? `${this.baseURL}/user/repos?sort=updated&per_page=100&affiliation=owner`
+      : `${this.baseURL}/users/${username}/repos?sort=updated&per_page=100&type=owner`;
+    
+    return this.fetchWithRetry(endpoint);
+  }
+
+  async getRepoDetails(username: string, repoName: string): Promise<{
+    commitCount: number;
+    languages: string[];
+  }> {
+    // Fetch commit count and languages in parallel
+    const [commitCountResult, languagesResult] = await Promise.allSettled([
+      this.getCommitCount(username, repoName),
+      this.getLanguages(username, repoName)
+    ]);
+
+    return {
+      commitCount: commitCountResult.status === 'fulfilled' ? commitCountResult.value : 1,
+      languages: languagesResult.status === 'fulfilled' ? languagesResult.value : []
+    };
+  }
+
+  private async getCommitCount(username: string, repoName: string): Promise<number> {
+    try {
+      // Try contributors API first (most efficient)
+      const contributors = await this.fetchWithRetry(
+        `${this.baseURL}/repos/${username}/${repoName}/contributors?per_page=100`
+      );
+      
+      if (Array.isArray(contributors)) {
+        return contributors.reduce((total, contributor) => 
+          total + (contributor.contributions || 0), 0
+        );
+      }
+    } catch (error) {
+      // Fallback to commits API with pagination
+      try {
+        const response = await fetch(
+          `${this.baseURL}/repos/${username}/${repoName}/commits?per_page=1`,
+          { headers: this.headers }
+        );
+        
+        const linkHeader = response.headers.get('Link');
+        if (linkHeader) {
+          const lastPageMatch = linkHeader.match(/page=(\d+)>; rel="last"/);
+          if (lastPageMatch) {
+            return parseInt(lastPageMatch[1]);
+          }
+        }
+      } catch (fallbackError) {
+        // Silent fallback
+      }
+    }
+    
+    return 1; // Default fallback
+  }
+
+  private async getLanguages(username: string, repoName: string): Promise<string[]> {
+    try {
+      const languages = await this.fetchWithRetry(
+        `${this.baseURL}/repos/${username}/${repoName}/languages`
+      );
+      return Object.keys(languages).slice(0, 4);
+    } catch (error) {
+      return [];
+    }
+  }
+}
+
 const TerminalWindow = ({ 
   children, 
   title = "kushagrash@portfolio", 
@@ -159,19 +311,99 @@ const StatusIndicator = ({ status, label }: { status: 'online' | 'busy' | 'away'
   );
 };
 
-const SkillBadge = ({ skill, level }: { skill: string; level: number }) => (
-  <div className="group relative">
-    <div className="bg-gray-800/50 border border-gray-600/50 rounded-lg px-3 py-2 hover:border-green-400/50 transition-all duration-300 hover:shadow-lg hover:shadow-green-400/10">
-      <div className="text-gray-300 text-sm font-medium mb-1">{skill}</div>
-      <div className="w-full bg-gray-700 rounded-full h-1">
-        <div 
-          className="bg-gradient-to-r from-green-400 to-blue-400 h-1 rounded-full transition-all duration-1000 ease-out"
-          style={{ width: `${level}%` }}
-        ></div>
-      </div>
+const SkillDownload = ({ skill, level, delay = 0 }: { skill: string; level: number; delay?: number }) => {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [isComplete, setIsComplete] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsDownloading(true);
+      
+      let currentProgress = 0;
+      const interval = setInterval(() => {
+        currentProgress += Math.random() * 15 + 5; // Random progress increment
+        if (currentProgress >= level) {
+          currentProgress = level;
+          setIsComplete(true);
+          clearInterval(interval);
+          setTimeout(() => setShowDetails(true), 300);
+        }
+        setProgress(currentProgress);
+      }, 120);
+
+      return () => clearInterval(interval);
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [level, delay]);
+
+  const getDownloadSpeed = () => {
+    const speeds = ['1.2MB/s', '850KB/s', '2.1MB/s', '650KB/s'];
+    return speeds[Math.floor(Math.random() * speeds.length)];
+  };
+
+  const getPackageSize = () => {
+    const sizes = ['45MB', '24MB', '67MB', '35MB'];
+    return sizes[Math.floor(Math.random() * sizes.length)];
+  };
+
+  return (
+    <div className="group font-mono text-xs bg-gray-900/80 border border-gray-700/50 rounded-md p-2 hover:border-green-400/50 transition-all duration-300">
+      {!isDownloading ? (
+        <div className="text-gray-500">
+          <span className="text-yellow-400">⚡</span> {skill.toLowerCase().replace(/[^a-z0-9]/g, '-')}...
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-cyan-400 truncate">
+              📦 {skill.toLowerCase().replace(/[^a-z0-9]/g, '-')}@latest
+            </span>
+            {isComplete && <span className="text-green-400 text-xs">✓</span>}
+          </div>
+          
+          <div className="flex items-center space-x-2 text-gray-400 text-xs">
+            <span className="text-blue-400">FETCH</span>
+            <span>{getPackageSize()}</span>
+            {isDownloading && !isComplete && (
+              <span className="text-green-400">{getDownloadSpeed()}</span>
+            )}
+          </div>
+
+          <div className="w-full bg-gray-800 rounded-sm h-1 overflow-hidden">
+            <div 
+              className={`h-full transition-all duration-200 ease-out ${
+                isComplete 
+                  ? 'bg-green-400' 
+                  : 'bg-gradient-to-r from-blue-400 to-cyan-400'
+              }`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          <div className="flex justify-between text-gray-500 text-xs">
+            <span>{Math.round(progress)}%</span>
+            <span>
+              {isComplete ? (
+                <span className="text-green-400">DONE</span>
+              ) : (
+                <span className="text-yellow-400">DOWNLOADING</span>
+              )}
+            </span>
+          </div>
+
+          {showDetails && (
+            <div className="text-gray-500 text-xs mt-1 animate-fade-in">
+              <div className="text-green-400">✓ {skill} installed</div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 const ProjectCard = ({ project, index }: { project: any; index: number }) => (
   <div 
@@ -240,6 +472,156 @@ const ProjectCard = ({ project, index }: { project: any; index: number }) => (
   </div>
 );
 
+const MessageForm = () => {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    message: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.name || !formData.email || !formData.message) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitStatus('idle');
+
+    try {
+      // Use our internal API route
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          message: formData.message,
+        }),
+      });
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setSubmitStatus('success');
+        setFormData({ name: '', email: '', message: '' });
+      } else {
+        throw new Error(result.error || 'Failed to send message');
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setSubmitStatus('error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <CommandLine 
+      command="vim /tmp/message.txt" 
+      output={
+        <div className="space-y-4">
+          <div className="text-xs text-gray-500 mb-4">-- INSERT MODE --</div>
+          
+          {submitStatus === 'success' && (
+            <div className="bg-green-900/50 border border-green-400/30 rounded-lg p-3 mb-4">
+              <div className="text-green-400 text-sm font-mono">
+                ✓ Message sent successfully! I'll get back to you soon.
+              </div>
+            </div>
+          )}
+
+          {submitStatus === 'error' && (
+            <div className="bg-red-900/50 border border-red-400/30 rounded-lg p-3 mb-4">
+              <div className="text-red-400 text-sm font-mono">
+                ✗ Failed to send message. Please try again or email directly.
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-gray-400 text-sm mb-2 font-mono">:set name=</label>
+              <input
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleInputChange}
+                required
+                className="w-full bg-gray-800/50 border border-gray-600/50 rounded-lg px-4 py-3 text-gray-300 focus:border-green-400/50 focus:outline-none focus:ring-2 focus:ring-green-400/20 transition-all duration-300"
+                placeholder="Your name"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div>
+              <label className="block text-gray-400 text-sm mb-2 font-mono">:set email=</label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                required
+                className="w-full bg-gray-800/50 border border-gray-600/50 rounded-lg px-4 py-3 text-gray-300 focus:border-green-400/50 focus:outline-none focus:ring-2 focus:ring-green-400/20 transition-all duration-300"
+                placeholder="your@email.com"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div>
+              <label className="block text-gray-400 text-sm mb-2 font-mono">:set message=</label>
+              <textarea
+                name="message"
+                value={formData.message}
+                onChange={handleInputChange}
+                required
+                rows={4}
+                className="w-full bg-gray-800/50 border border-gray-600/50 rounded-lg px-4 py-3 text-gray-300 focus:border-green-400/50 focus:outline-none focus:ring-2 focus:ring-green-400/20 transition-all duration-300 resize-none"
+                placeholder="Your message..."
+                disabled={isSubmitting}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isSubmitting || !formData.name || !formData.email || !formData.message}
+              className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-bold transition-all duration-300 group ${
+                isSubmitting || !formData.name || !formData.email || !formData.message
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-black hover:shadow-lg hover:shadow-green-400/30'
+              }`}
+            >
+              <span>
+                {isSubmitting ? ':w (sending...)' : ':wq (send)'}
+              </span>
+              {!isSubmitting && (
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              )}
+            </button>
+          </form>
+        </div>
+      }
+      delay={0}
+    />
+  );
+};
+
 export default function Home() {
   const [currentSection, setCurrentSection] = useState('welcome');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -253,7 +635,7 @@ export default function Home() {
   useEffect(() => {
     const fetchGitHubData = async () => {
       const cacheKey = 'github_commits_data';
-      const cacheExpiry = 15 * 60 * 1000; // 15 minutes cache
+      const cacheExpiry = CACHE_CONFIG.COMMITS_EXPIRY;
       
       try {
         // Check localStorage first
@@ -270,18 +652,32 @@ export default function Home() {
         }
 
         const username = 'KushagraSharma924';
-        const reposResponse = await fetch(`https://api.github.com/users/${username}/repos?sort=updated&per_page=5`);
-        const repos = await reposResponse.json();
+        
+        // Use the optimized GitHub API client
+        const githubClient = new GitHubAPIClient(process.env.NEXT_PUBLIC_GITHUB_TOKEN);
+        
+        // Get recent repos
+        const repos = await githubClient.getRepos(username, false);
+        
+        if (!Array.isArray(repos) || repos.length === 0) {
+          throw new Error('No repositories found');
+        }
         
         const commitsData: any[] = [];
-        for (const repo of repos.slice(0, 3)) {
-
+        
+        // Process repos in batches to get commit data
+        const recentRepos = repos
+          .filter(repo => !repo.fork && repo.size > 0) // Filter out forks and empty repos
+          .slice(0, 5); // Get top 5 recent repos
+        
+        for (const repo of recentRepos) {
           try {
-            const commitsResponse = await fetch(`https://api.github.com/repos/${username}/${repo.name}/commits?per_page=2`);
-            const commits = await commitsResponse.json();
+            const commitsResponse = await githubClient.fetchWithRetry(
+              `https://api.github.com/repos/${username}/${repo.name}/commits?per_page=3`
+            );
             
-            if (Array.isArray(commits)) {
-              commits.forEach(commit => {
+            if (Array.isArray(commitsResponse)) {
+              commitsResponse.forEach(commit => {
                 commitsData.push({
                   sha: commit.sha.substring(0, 7),
                   message: commit.commit.message.split('\n')[0],
@@ -291,14 +687,21 @@ export default function Home() {
                 });
               });
             }
+            
+            // Small delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, CACHE_CONFIG.REQUEST_DELAY));
           } catch (error) {
-            // Silent error handling for individual repos
+            console.warn(`Failed to fetch commits for ${repo.name}:`, error);
           }
         }
         
+        if (commitsData.length === 0) {
+          throw new Error('No commits found');
+        }
+        
         // Sort commits by date (newest first)
-        commitsData.sort((a, b) => b.date - a.date);
-        const finalCommits = commitsData.slice(0, 5);
+        commitsData.sort((a, b) => b.date.getTime() - a.date.getTime());
+        const finalCommits = commitsData.slice(0, 8); // Show more commits
         
         // Cache the results
         localStorage.setItem(cacheKey, JSON.stringify(finalCommits));
@@ -307,13 +710,14 @@ export default function Home() {
         setGitCommits(finalCommits);
         setLoading(false);
       } catch (error) {
-        // Fallback to mock data
+        console.warn('Failed to fetch GitHub commits, using fallback:', error);
+        // Only use fallback as last resort
         const fallbackCommits = [
-          { sha: '2f8a9c3', message: 'feat: Enhanced terminal UI with advanced animations', repo: 'portfolio', author: 'Kushagra Sharma' },
-          { sha: '1a7b2d4', message: 'feat: Added smooth scroll navigation and parallax effects', repo: 'portfolio', author: 'Kushagra Sharma' },
-          { sha: '9e5f1c8', message: 'feat: Implemented typewriter animations and terminal windows', repo: 'portfolio', author: 'Kushagra Sharma' },
-          { sha: '4d3a7b2', message: 'feat: Created responsive portfolio layout', repo: 'portfolio', author: 'Kushagra Sharma' },
-          { sha: '8c1f5e9', message: 'initial: Portfolio foundation with Next.js and Tailwind', repo: 'portfolio', author: 'Kushagra Sharma' }
+          { sha: '2f8a9c3', message: 'feat: Enhanced terminal UI with advanced animations', repo: 'portfolio', author: 'Kushagra Sharma', date: new Date() },
+          { sha: '1a7b2d4', message: 'feat: Added smooth scroll navigation and parallax effects', repo: 'portfolio', author: 'Kushagra Sharma', date: new Date(Date.now() - 86400000) },
+          { sha: '9e5f1c8', message: 'feat: Implemented typewriter animations and terminal windows', repo: 'portfolio', author: 'Kushagra Sharma', date: new Date(Date.now() - 172800000) },
+          { sha: '4d3a7b2', message: 'feat: Created responsive portfolio layout', repo: 'portfolio', author: 'Kushagra Sharma', date: new Date(Date.now() - 259200000) },
+          { sha: '8c1f5e9', message: 'initial: Portfolio foundation with Next.js and Tailwind', repo: 'portfolio', author: 'Kushagra Sharma', date: new Date(Date.now() - 345600000) }
         ];
         setGitCommits(fallbackCommits);
         setLoading(false);
@@ -387,7 +791,6 @@ export default function Home() {
             repoNameLower.includes('awesome-') || 
             repoNameLower.includes('curated') ||
             repoNameLower.includes('list-') ||
-            repoNameLower.includes('resources') ||
             repoDescLower.includes('curated') ||
             repoDescLower.includes('collection of') ||
             repoDescLower.includes('awesome list') ||
@@ -766,14 +1169,22 @@ export default function Home() {
             />
           </TerminalWindow>
 
-          <TerminalWindow title="skills.db" className="terminal-window">
+          <TerminalWindow title="package-manager.log" className="terminal-window">
             <CommandLine 
-              command="SELECT * FROM skills ORDER BY proficiency DESC;" 
+              command="npm install @skills/*" 
               output={
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 gap-3">
-                    {skills.slice(0, 6).map((skill, index) => (
-                      <SkillBadge key={index} skill={skill.name} level={skill.level} />
+                <div className="space-y-2">
+                  <div className="text-green-400 text-xs mb-3 font-mono">
+                    🚀 Installing skill packages...
+                  </div>
+                  <div className="space-y-1.5">
+                    {skills.slice(0, 4).map((skill, index) => (
+                      <SkillDownload 
+                        key={index} 
+                        skill={skill.name} 
+                        level={skill.level} 
+                        delay={index * 600}
+                      />
                     ))}
                   </div>
                 </div>
@@ -866,48 +1277,7 @@ export default function Home() {
           </TerminalWindow>
 
           <TerminalWindow title="message.vim" className="terminal-window">
-            <CommandLine 
-              command="vim /tmp/message.txt" 
-              output={
-                <div className="space-y-4">
-                  <div className="text-xs text-gray-500 mb-4">-- INSERT MODE --</div>
-                  <form className="space-y-4">
-                    <div>
-                      <label className="block text-gray-400 text-sm mb-2 font-mono">:set name=</label>
-                      <input
-                        type="text"
-                        className="w-full bg-gray-800/50 border border-gray-600/50 rounded-lg px-4 py-3 text-gray-300 focus:border-green-400/50 focus:outline-none focus:ring-2 focus:ring-green-400/20 transition-all duration-300"
-                        placeholder="Your name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-gray-400 text-sm mb-2 font-mono">:set email=</label>
-                      <input
-                        type="email"
-                        className="w-full bg-gray-800/50 border border-gray-600/50 rounded-lg px-4 py-3 text-gray-300 focus:border-green-400/50 focus:outline-none focus:ring-2 focus:ring-green-400/20 transition-all duration-300"
-                        placeholder="your@email.com"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-gray-400 text-sm mb-2 font-mono">:set message=</label>
-                      <textarea
-                        rows={4}
-                        className="w-full bg-gray-800/50 border border-gray-600/50 rounded-lg px-4 py-3 text-gray-300 focus:border-green-400/50 focus:outline-none focus:ring-2 focus:ring-green-400/20 transition-all duration-300 resize-none"
-                        placeholder="Your message..."
-                      ></textarea>
-                    </div>
-                    <button
-                      type="submit"
-                      className="flex items-center space-x-2 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-black px-6 py-3 rounded-lg font-bold transition-all duration-300 hover:shadow-lg hover:shadow-green-400/30 group"
-                    >
-                      <span>:wq (send)</span>
-                      <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                    </button>
-                  </form>
-                </div>
-              }
-              delay={0}
-            />
+            <MessageForm />
           </TerminalWindow>
         </div>
 
@@ -925,18 +1295,20 @@ export default function Home() {
                   <Code className="w-4 h-4" />
                   <span>Built with Next.js</span>
                 </div>
-                <div className="w-1 h-1 bg-gray-500 rounded-full"></div>
-                <div className="flex items-center space-x-2">
-                  <Terminal className="w-4 h-4" />
-                  <span>Terminal aesthetic</span>
-                </div>
               </div>
-              <TypewriterText 
-                text="© 2025 Kushagra Sharma. All rights reserved. Buy me a Coffee" 
-                delay={1000}
-                speed={30}
-                className="text-gray-400 font-mono text-sm"
-              />
+              <div className="flex items-center justify-center space-x-2">
+                <span className="text-gray-400 font-mono text-sm">© 2025 Kushagra Sharma. All rights reserved.</span>
+                <a 
+                  href="https://coff.ee/kushagrash" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center space-x-1 text-yellow-400 hover:text-yellow-300 transition-colors duration-300 font-mono text-sm ml-2"
+                >
+                  <Coffee className="w-3 h-3" />
+                  <span>Buy me a Coffee</span>
+                </a>
+                <span className="bg-green-400 text-green-400 inline-block w-2 h-4 ml-1 animate-pulse rounded-sm">█</span>
+              </div>
             </div>
           </TerminalWindow>
         </div>
