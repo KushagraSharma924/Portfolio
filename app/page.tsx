@@ -1,7 +1,38 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { Terminal, Folder, File, User, Mail, Github, Linkedin, ExternalLink, ChevronRight, Code, Database, Globe, Zap, Coffee, Star, GitBranch, Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Terminal, Folder, File, User, Mail, Github, Linkedin, ExternalLink, ChevronRight, Code, Database, Globe, Zap, Coffee, Star, GitBranch, Play, Pause, Volume2, VolumeX, X, Home, Briefcase, MessageSquare } from 'lucide-react';
+
+// Type definitions
+interface Project {
+  name: string;
+  description: string;
+  tech: string[];
+  status: string;
+  stars: number;
+  forks: number;
+  updated: string;
+  commitCount: number;
+  url: string;
+  language: string;
+  size: number;
+  createdAt: Date;
+  pushedAt: Date;
+  html_url: string;
+  stargazers_count: number;
+  topics?: string[];
+}
+
+interface ContactFormData {
+  name: string;
+  email: string;
+  message: string;
+}
+
+interface FormStatus {
+  type: 'idle' | 'loading' | 'success' | 'error';
+  message: string;
+}
 
 // Cache configuration
 const CACHE_CONFIG = {
@@ -121,26 +152,10 @@ class GitHubAPIClient {
         );
       }
     } catch (error) {
-      // Fallback to commits API with pagination
-      try {
-        const response = await fetch(
-          `${this.baseURL}/repos/${username}/${repoName}/commits?per_page=1`,
-          { headers: this.headers }
-        );
-        
-        const linkHeader = response.headers.get('Link');
-        if (linkHeader) {
-          const lastPageMatch = linkHeader.match(/page=(\d+)>; rel="last"/);
-          if (lastPageMatch) {
-            return parseInt(lastPageMatch[1]);
-          }
-        }
-      } catch (fallbackError) {
-        // Silent fallback
-      }
+      console.error(`Error fetching commit count for ${repoName}:`, error);
     }
     
-    return 1; // Default fallback
+    return 0; // Return 0 if unable to fetch
   }
 
   private async getLanguages(username: string, repoName: string): Promise<string[]> {
@@ -242,20 +257,25 @@ const TypewriterText = ({
   );
 };
 
-const CommandLine = ({ 
-  command, 
-  output, 
-  delay = 0,
-  user = "Kushagrash",
-  host = "portfolio",
-  path = "~"
-}: { 
+const CommandLine: React.FC<{ 
   command: string; 
   output?: React.ReactNode; 
   delay?: number;
   className?: string;
-}> = ({ command, output, delay = 0, className = "" }) => {
-  const [isVisible, setIsVisible] = useState(false);
+  user?: string;
+  host?: string;
+  path?: string;
+}> = ({ 
+  command, 
+  output, 
+  delay = 0, 
+  className = "",
+  user = "Kushagrash",
+  host = "portfolio",
+  path = "~"
+}) => {
+  const [showCommand, setShowCommand] = useState(false);
+  const [showOutput, setShowOutput] = useState(false);
 
   useEffect(() => {
     const timer1 = setTimeout(() => setShowCommand(true), delay);
@@ -309,10 +329,22 @@ const StatusIndicator = ({ status, label }: { status: 'online' | 'busy' | 'away'
 };
 
 const SkillDownload = ({ skill, level, delay = 0 }: { skill: string; level: number; delay?: number }) => {
+  const [isVisible, setIsVisible] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+
+  // Helper functions
+  const getPackageSize = () => {
+    const sizes = ['12.3 kB', '4.7 MB', '892 kB', '2.1 MB', '567 kB'];
+    return sizes[Math.floor(Math.random() * sizes.length)];
+  };
+
+  const getDownloadSpeed = () => {
+    const speeds = ['1.2 MB/s', '847 kB/s', '2.3 MB/s', '1.8 MB/s'];
+    return speeds[Math.floor(Math.random() * speeds.length)];
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -450,9 +482,16 @@ const ContactForm: React.FC = () => {
     message: ''
   });
   const [status, setStatus] = useState<FormStatus>({ type: 'idle', message: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     setStatus({ type: 'loading', message: 'Sending message...' });
 
     try {
@@ -472,6 +511,8 @@ const ContactForm: React.FC = () => {
       }
     } catch (error) {
       setStatus({ type: 'error', message: 'Network error. Please try again.' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -482,7 +523,7 @@ const ContactForm: React.FC = () => {
         <div className="space-y-4">
           <div className="text-xs text-gray-500 mb-4">-- INSERT MODE --</div>
           
-          {submitStatus === 'success' && (
+          {status.type === 'success' && (
             <div className="bg-green-900/50 border border-green-400/30 rounded-lg p-3 mb-4">
               <div className="text-green-400 text-sm font-mono">
                 ✓ Message sent successfully! I'll get back to you soon.
@@ -490,7 +531,7 @@ const ContactForm: React.FC = () => {
             </div>
           )}
 
-          {submitStatus === 'error' && (
+          {status.type === 'error' && (
             <div className="bg-red-900/50 border border-red-400/30 rounded-lg p-3 mb-4">
               <div className="text-red-400 text-sm font-mono">
                 ✗ Failed to send message. Please try again or email directly.
@@ -648,6 +689,10 @@ const MobileNav: React.FC<{
 export default function Portfolio() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [realProjects, setRealProjects] = useState<Project[]>([]);
+  const [gitCommits, setGitCommits] = useState<any[]>([]);
+  const [terminalRef] = useState(useRef<HTMLDivElement>(null));
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const aboutRef = useRef<HTMLDivElement>(null);
   const projectsRef = useRef<HTMLDivElement>(null);
@@ -655,8 +700,25 @@ export default function Portfolio() {
 
   // Fetch GitHub projects
   useEffect(() => {
-    const fetchProjects = async () => {
+    const fetchGitHubProjects = async () => {
+      const username = 'KushagraSharma924';
+      const cacheKey = `github_projects_${username}`;
+      
       try {
+        // Check cache first
+        const cachedData = localStorage.getItem(cacheKey);
+        const cacheTimestamp = localStorage.getItem(cacheKey + '_timestamp');
+        
+        if (cachedData && cacheTimestamp) {
+          const isExpired = Date.now() - parseInt(cacheTimestamp) > CACHE_CONFIG.PROJECTS_EXPIRY;
+          if (!isExpired) {
+            const parsedData = JSON.parse(cachedData);
+            setRealProjects(parsedData);
+            setProjectsLoading(false);
+            return;
+          }
+        }
+
         const token = process.env.NEXT_PUBLIC_GITHUB_TOKEN;
         const headers: HeadersInit = {
           'Accept': 'application/vnd.github.v3+json',
@@ -666,12 +728,12 @@ export default function Portfolio() {
           headers['Authorization'] = `token ${token}`;
         }
 
-        const response = await fetch('https://api.github.com/users/kushagra-sh/repos?sort=updated&per_page=6', {
+        const response = await fetch(`https://api.github.com/users/${username}/repos?sort=updated&per_page=30`, {
           headers
         });
-        const repos = await reposResponse.json();
+        const repos = await response.json();
         
-        if (!reposResponse.ok) {
+        if (!response.ok) {
           setProjectsLoading(false);
           return;
         }
@@ -767,10 +829,10 @@ export default function Portfolio() {
                 techStack = Object.keys(languages).slice(0, 4);
               }
             } catch (error) {
-              // Silent error handling
+              console.error(`Error fetching languages for ${repo.name}:`, error);
             }
 
-            // Use repo.language as fallback
+            // If no languages detected from API, use repo.language
             if (techStack.length === 0 && repo.language) {
               techStack = [repo.language];
             }
@@ -790,10 +852,13 @@ export default function Portfolio() {
                 updated: new Date(repo.updated_at).toLocaleDateString(),
                 commitCount: commitCount,
                 url: repo.html_url,
+                html_url: repo.html_url,
+                stargazers_count: repo.stargazers_count || 0,
                 language: repo.language || 'Code',
                 size: repo.size || 0,
                 createdAt: new Date(repo.created_at),
-                pushedAt: new Date(repo.pushed_at || repo.updated_at)
+                pushedAt: new Date(repo.pushed_at || repo.updated_at),
+                topics: repo.topics || []
               });
             }
 
@@ -813,10 +878,13 @@ export default function Portfolio() {
                 updated: new Date(repo.updated_at).toLocaleDateString(),
                 commitCount: repo.private ? 1 : (repo.size > 0 ? 1 : 0), // Assume private repos have commits
                 url: repo.html_url,
+                html_url: repo.html_url,
+                stargazers_count: repo.stargazers_count || 0,
                 language: repo.language || 'Code',
                 size: repo.size || 0,
                 createdAt: new Date(repo.created_at),
-                pushedAt: new Date(repo.pushed_at || repo.updated_at)
+                pushedAt: new Date(repo.pushed_at || repo.updated_at),
+                topics: repo.topics || []
               });
             }
           }
@@ -842,56 +910,37 @@ export default function Portfolio() {
         
         setRealProjects(finalProjects);
         setProjectsLoading(false);
-      } catch (error) {
-        // Fallback: Try without authentication to get public repos
-        try {
-          const fallbackResponse = await fetch(`https://api.github.com/users/KushagraSharma924/repos?sort=updated&per_page=50&type=owner`);
-          const fallbackRepos = await fallbackResponse.json();
-          
-          if (Array.isArray(fallbackRepos) && fallbackRepos.length > 0) {
-            const fallbackProjects = fallbackRepos
-              .filter(repo => {
-                // Accept all repos that have some activity, including forks
-                const repoNameLower = repo.name.toLowerCase();
-                const repoDescLower = (repo.description || '').toLowerCase();
-                
-                const isLikelyStarred = 
-                  repoNameLower.includes('awesome-') || 
-                  repoNameLower.includes('curated') ||
-                  repoNameLower.includes('list-') ||
-                  repoDescLower.includes('curated') ||
-                  repoDescLower.includes('collection of');
-                
-                return !isLikelyStarred && repo.size > 0;
-              })
-              .slice(0, 10)
-              .map(repo => ({
-                name: repo.name,
-                description: repo.description || 'No description available',
-                tech: [repo.language || 'Code'],
-                status: repo.fork ? 'fork' : 'public',
-                stars: repo.stargazers_count || 0,
-                forks: repo.forks_count || 0,
-                updated: new Date(repo.updated_at).toLocaleDateString(),
-                commitCount: 1,
-                url: repo.html_url,
-                language: repo.language || 'Code',
-                size: repo.size || 0,
-                createdAt: new Date(repo.created_at),
-                pushedAt: new Date(repo.pushed_at || repo.updated_at)
+        
+        // Fetch recent commits from multiple repos
+        const commitPromises = finalProjects.slice(0, 5).map(async (project) => {
+          try {
+            const commitsResponse = await fetch(`https://api.github.com/repos/${username}/${project.name}/commits?per_page=3`, {
+              headers
+            });
+            if (commitsResponse.ok) {
+              const commits = await commitsResponse.json();
+              return commits.map((commit: any) => ({
+                sha: commit.sha.substring(0, 7),
+                message: commit.commit.message.split('\n')[0].substring(0, 50),
+                repo: project.name
               }));
-            
-            // Cache fallback results too
-            localStorage.setItem(cacheKey, JSON.stringify(fallbackProjects));
-            localStorage.setItem(cacheKey + '_timestamp', Date.now().toString());
-            
-            setRealProjects(fallbackProjects);
+            }
+          } catch (error) {
+            console.error(`Error fetching commits for ${project.name}:`, error);
           }
-        } catch (fallbackError) {
-          // Silent error handling
-        }
+          return [];
+        });
+
+        const allCommits = await Promise.all(commitPromises);
+        const flatCommits = allCommits.flat().slice(0, 10);
+        setGitCommits(flatCommits);
+        setLoading(false);
+        
+      } catch (error) {
+        console.error('Error fetching GitHub projects:', error);
         
         setProjectsLoading(false);
+        setLoading(false);
       }
     };
 
@@ -1079,7 +1128,7 @@ export default function Portfolio() {
                         🏆 Most recently updated repositories (your latest work)
                       </div>
                       {realProjects.slice(0, 2).map((project, index) => (
-                        <ProjectCard key={index} project={project} index={index} />
+                        <ProjectCard key={index} project={project} />
                       ))}
                     </>
                   ) : (
@@ -1143,19 +1192,6 @@ export default function Portfolio() {
                             </div>
                           ))}
                         </div>
-                      )}
-
-                      <div className="text-center pt-6">
-                        <a
-                          href="https://github.com/kushagra-sh"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors font-medium"
-                        >
-                          <Github className="w-4 h-4" />
-                          View All Projects on GitHub
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
                       </div>
                     </div>
                   ))}
@@ -1212,7 +1248,7 @@ export default function Portfolio() {
           </TerminalWindow>
 
           <TerminalWindow title="message.vim" className="terminal-window">
-            <MessageForm />
+            <ContactForm />
           </TerminalWindow>
         </div>
 
@@ -1247,7 +1283,7 @@ export default function Portfolio() {
             </div>
           </TerminalWindow>
         </div>
-      </footer>
+      </div>
     </div>
   );
 }
