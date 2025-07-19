@@ -705,6 +705,7 @@ export default function Portfolio() {
       const cacheKey = `github_projects_${username}`;
       
       try {
+        console.log('[GitHub Fetch] Starting fetch for user:', username);
         // Check cache first
         const cachedData = localStorage.getItem(cacheKey);
         const cacheTimestamp = localStorage.getItem(cacheKey + '_timestamp');
@@ -713,6 +714,7 @@ export default function Portfolio() {
           const isExpired = Date.now() - parseInt(cacheTimestamp) > CACHE_CONFIG.PROJECTS_EXPIRY;
           if (!isExpired) {
             const parsedData = JSON.parse(cachedData);
+            console.log('[GitHub Fetch] Using cached project data:', parsedData);
             setRealProjects(parsedData);
             setProjectsLoading(false);
             return;
@@ -728,17 +730,21 @@ export default function Portfolio() {
           headers['Authorization'] = `token ${token}`;
         }
 
+        console.log('[GitHub Fetch] Fetching repositories from GitHub API...');
         const response = await fetch(`https://api.github.com/users/${username}/repos?sort=updated&per_page=30`, {
           headers
         });
         const repos = await response.json();
+        console.log('[GitHub Fetch] Repositories received:', repos);
         
         if (!response.ok) {
+          console.error('[GitHub Fetch] Error response from repo fetch:', response.status, repos);
           setProjectsLoading(false);
           return;
         }
         
         if (!Array.isArray(repos)) {
+          console.error('[GitHub Fetch] Repos is not an array:', repos);
           setProjectsLoading(false);
           return;
         }
@@ -748,6 +754,7 @@ export default function Portfolio() {
         // Process repos in batches to avoid rate limiting
         for (let i = 0; i < Math.min(repos.length, 30); i++) {
           const repo = repos[i];
+          console.log(`[GitHub Fetch] Processing repo: ${repo.name}`);
           
           // Improved filtering for starred/curated repositories
           const repoNameLower = repo.name.toLowerCase();
@@ -765,6 +772,7 @@ export default function Portfolio() {
             (repo.size === 0 && !repo.private && repo.fork);
           
           if (isLikelyStarred) {
+            console.log(`[GitHub Fetch] Skipping likely starred/curated repo: ${repo.name}`);
             continue;
           }
           
@@ -774,24 +782,29 @@ export default function Portfolio() {
             
             try {
               // Method 1: Try to get commit count from contributors API (most accurate)
+              console.log(`[GitHub Fetch] Fetching contributors for repo: ${repo.name}`);
               const contributorsResponse = await fetch(`https://api.github.com/repos/${username}/${repo.name}/contributors?per_page=100`, {
                 headers
               });
               if (contributorsResponse.ok) {
                 const contributors = await contributorsResponse.json();
+                console.log(`[GitHub Fetch] Contributors for ${repo.name}:`, contributors);
                 if (Array.isArray(contributors)) {
                   commitCount = contributors.reduce((total: number, contributor: any) => {
                     return total + (contributor.contributions || 0);
                   }, 0);
                 }
+              } else {
+                console.error(`[GitHub Fetch] Error fetching contributors for ${repo.name}:`, contributorsResponse.status);
               }
             } catch (error) {
-              // Silent error handling
+              console.error(`[GitHub Fetch] Exception fetching contributors for ${repo.name}:`, error);
             }
 
             // Method 2: If contributors API fails, try commits API with pagination
             if (commitCount === 0) {
               try {
+                console.log(`[GitHub Fetch] Fetching commits (pagination) for repo: ${repo.name}`);
                 const commitsResponse = await fetch(`https://api.github.com/repos/${username}/${repo.name}/commits?per_page=1`, {
                   headers
                 });
@@ -801,19 +814,25 @@ export default function Portfolio() {
                     const lastPageMatch = linkHeader.match(/page=(\d+)>; rel="last"/);
                     if (lastPageMatch) {
                       commitCount = parseInt(lastPageMatch[1]);
+                      console.log(`[GitHub Fetch] Commit count from pagination for ${repo.name}:`, commitCount);
                     }
                   } else {
                     // If no pagination, fetch all commits to count
+                    console.log(`[GitHub Fetch] Fetching all commits for repo: ${repo.name}`);
                     const allCommitsResponse = await fetch(`https://api.github.com/repos/${username}/${repo.name}/commits`, {
                       headers
                     });
                     if (allCommitsResponse.ok) {
                       const commits = await allCommitsResponse.json();
                       commitCount = Array.isArray(commits) ? commits.length : 1;
+                      console.log(`[GitHub Fetch] Commit count from all commits for ${repo.name}:`, commitCount);
                     }
                   }
+                } else {
+                  console.error(`[GitHub Fetch] Error fetching commits for ${repo.name}:`, commitsResponse.status);
                 }
               } catch (error) {
+                console.error(`[GitHub Fetch] Exception fetching commits for ${repo.name}:`, error);
                 commitCount = 1; // Default to 1 if we can't get count
               }
             }
@@ -821,15 +840,19 @@ export default function Portfolio() {
             // Get languages
             let techStack: string[] = [];
             try {
+              console.log(`[GitHub Fetch] Fetching languages for repo: ${repo.name}`);
               const languagesResponse = await fetch(`https://api.github.com/repos/${username}/${repo.name}/languages`, {
                 headers
               });
               if (languagesResponse.ok) {
                 const languages = await languagesResponse.json();
                 techStack = Object.keys(languages).slice(0, 4);
+                console.log(`[GitHub Fetch] Languages for ${repo.name}:`, techStack);
+              } else {
+                console.error(`[GitHub Fetch] Error fetching languages for ${repo.name}:`, languagesResponse.status);
               }
             } catch (error) {
-              console.error(`Error fetching languages for ${repo.name}:`, error);
+              console.error(`[GitHub Fetch] Exception fetching languages for ${repo.name}:`, error);
             }
 
             // If no languages detected from API, use repo.language
@@ -860,12 +883,14 @@ export default function Portfolio() {
                 pushedAt: new Date(repo.pushed_at || repo.updated_at),
                 topics: repo.topics || []
               });
+              console.log(`[GitHub Fetch] Added project: ${repo.name}, commits: ${commitCount}, tech:`, techStack);
             }
 
             // Add small delay to avoid rate limiting
             await new Promise(resolve => setTimeout(resolve, 150));
 
           } catch (error) {
+            console.error(`[GitHub Fetch] Exception processing repo ${repo.name}:`, error);
             // Add basic info for any repo that's not likely starred (including forks you've worked on)
             if (!isLikelyStarred) {
               projectsData.push({
@@ -886,6 +911,7 @@ export default function Portfolio() {
                 pushedAt: new Date(repo.pushed_at || repo.updated_at),
                 topics: repo.topics || []
               });
+              console.log(`[GitHub Fetch] Fallback added project: ${repo.name}`);
             }
           }
         }
@@ -903,6 +929,7 @@ export default function Portfolio() {
         });
 
         const finalProjects = projectsData.slice(0, 15); // Show top 15 projects
+        console.log('[GitHub Fetch] Final sorted projects:', finalProjects);
         
         // Cache the results
         localStorage.setItem(cacheKey, JSON.stringify(finalProjects));
@@ -914,16 +941,20 @@ export default function Portfolio() {
         // Fetch recent commits from multiple repos
         const commitPromises = finalProjects.slice(0, 5).map(async (project) => {
           try {
+            console.log(`[GitHub Fetch] Fetching recent commits for repo: ${project.name}`);
             const commitsResponse = await fetch(`https://api.github.com/repos/${username}/${project.name}/commits?per_page=3`, {
               headers
             });
             if (commitsResponse.ok) {
               const commits = await commitsResponse.json();
+              console.log(`[GitHub Fetch] Recent commits for ${project.name}:`, commits);
               return commits.map((commit: any) => ({
                 sha: commit.sha.substring(0, 7),
                 message: commit.commit.message.split('\n')[0].substring(0, 50),
                 repo: project.name
               }));
+            } else {
+              console.error(`[GitHub Fetch] Error fetching commits for ${project.name}:`, commitsResponse.status);
             }
           } catch (error) {
             console.error(`Error fetching commits for ${project.name}:`, error);
@@ -933,6 +964,7 @@ export default function Portfolio() {
 
         const allCommits = await Promise.all(commitPromises);
         const flatCommits = allCommits.flat().slice(0, 10);
+        console.log('[GitHub Fetch] All recent commits:', flatCommits);
         setGitCommits(flatCommits);
         setLoading(false);
         
